@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>简易文件编辑器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 20%;
+            background-color: #f0f0f0;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #editor {
+            flex-grow: 1;
+            padding: 20px;
+        }
+
+        .file-item {
+            cursor: pointer;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .file-item:hover {
+            background-color: #e9e9e9;
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+        }
+
+        .data-item {
+            background-color: #f2f2f2;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .value, .default-value {
+            background-color: #e0f0ff;
+            padding: 2px 4px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        .default-value {
+            background-color: #a0a0a0;
+        }
+
+        /* 深灰色背景 */
+        .description {
+            display: block;
+            margin-top: 5px;
+        }
+
+        input, select {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div>文件列表</div>
+    <div id="fileList"></div>
+    <button class="refresh-btn" onclick="fetchFileList()">刷新</button>
+</div>
+
+<div id="editor">
+    <div>文件内容</div>
+    <div id="fileContent"></div>
+</div>
+
+<script>
+    let currentFileName = '';
+
+    function fetchFileList() {
+        fetch('http://localhost:4567/api/files')
+            .then(response => response.json())
+            .then(data => {
+                const fileListElement = document.getElementById('fileList');
+                fileListElement.innerHTML = ''; // 清空现有列表
+                data.forEach(file => {
+                    const fileElement = document.createElement('div');
+                    fileElement.classList.add('file-item');
+                    fileElement.textContent = file;
+                    fileElement.onclick = () => {
+                        currentFileName = file;
+                        fetchFileContent(file);
+                    };
+                    fileListElement.appendChild(fileElement);
+                });
+            })
+            .catch(console.error);
+    }
+
+    function fetchFileContent(fileName) {
+        fetch(`http://localhost:4567/api/files/${fileName}`)
+            .then(response => response.json())
+            .then(data => {
+                const fileContentElement = document.getElementById('fileContent');
+                fileContentElement.innerHTML = ''; // 清空编辑器内容
+                data.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.classList.add('data-item');
+                    itemElement.innerHTML = `
+                    <div><span class="value">${item.name}</span> <span class="value">${item.type}</span> <span class="value">${item.defaultValue}</span></div>
+                    <div class="default-value">值:</div>
+                    <div class="description">${item.description}</div>
+                `;
+                    const inputElement = createInputForType(item.type, item.name, item.value);
+                    itemElement.children[1].appendChild(inputElement);
+                    fileContentElement.appendChild(itemElement);
+                });
+            })
+            .catch(console.error);
+    }
+
+    function createInputForType(type, name, defaultValue) {
+        let input;
+        switch (type) {
+            case 'string':
+                input = document.createElement('input');
+                input.type = 'text';
+                input.value = defaultValue;
+                break;
+            case 'int':
+            case 'float':
+                input = document.createElement('input');
+                input.type = 'number';
+                input.value = defaultValue;
+                if (type === 'int') {
+                    input.step = '1';
+                } else {
+                    input.step = 'any';
+                }
+                break;
+            case 'bool':
+                input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = defaultValue === 'true';
+                break;
+            default:
+                input = document.createElement('input');
+        }
+        input.onchange = () => handleInputChange(name, input.value || input.checked);
+        return input;
+    }
+
+    function handleInputChange(name, value) {
+        const url = `http://localhost:4567/api/files/${currentFileName}/change/${name}/${value}`;
+        fetch(url, {method: 'POST'})
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok.');
+                }
+                return response.json();
+            })
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+    }
+
+    // 页面加载完成时，自动获取文件列表
+    document.addEventListener('DOMContentLoaded', fetchFileList);
+</script>
+
+</body>
+</html>
